@@ -26,7 +26,8 @@ throwaway spike the user called a spike).
 Use the first one that exists, and tell the user where the note is, as a link when you have one.
 
 1. **A notes tool connected to you.** Bridge Notes (`notes_create`, `notes_read`, `notes_edit`),
-   Notion, or similar. The plan note is a page; the PR notes are a child page of it.
+   Notion, or similar. The plan note is a page; the PR notes are a child page of it. In Bridge,
+   create the plan as kind `note`, not `task`: a task cannot have child pages.
 2. **The issue.** Post the plan note as an issue comment
    (`gh issue comment <n> --body-file plan.md`) and keep editing that same comment
    (`gh api -X PATCH repos/{owner}/{repo}/issues/comments/<id> -F body=@plan.md`).
