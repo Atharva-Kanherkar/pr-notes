@@ -1,0 +1,41 @@
+name: PR notes
+
+# Fails a pull request whose body is missing any of the five PR notes:
+# What I did, Codebase affected, Users affected, Tests I ran, Tradeoffs and risks.
+# https://github.com/Atharva-Kanherkar/pr-notes
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-notes-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-notes:
+    name: PR notes
+    # Drafts are still being written; the check runs on ready_for_review.
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/check-pr-notes.mjs
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The body is untrusted text, so it reaches the checker as data in an
+      # environment variable and is never interpolated into the script.
+      - name: Check the PR notes
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          PR_AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+        run: node scripts/check-pr-notes.mjs
