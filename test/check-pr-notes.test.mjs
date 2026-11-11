@@ -82,6 +82,85 @@ test("an empty fence does not count as output", () => {
   assert.match(result.problems[0], /fenced code block/);
 });
 
+test("accepts an explicit no-run declaration with a visible reason", () => {
+  const result = checkPullRequestFormat(body({
+    tests: "Not run: the required staging receiver is unavailable.\n\nStill unverified: delivery recovery in staging.",
+  }));
+  assert.equal(result.ok, true, result.problems.join("\n"));
+  assert.equal(result.exempt, false);
+});
+
+test("no-run declarations work with CRLF and nested verification notes", () => {
+  const markdown = body({
+    tests: "Not run: this draft has no implementation to exercise.\n\n### Still unverified\n\nAll planned acceptance criteria.",
+  }).replaceAll("\n", "\r\n");
+  const result = checkPullRequestFormat(markdown);
+  assert.equal(result.ok, true, result.problems.join("\n"));
+});
+
+test("no-run declarations need a reason beyond placeholders or comments", () => {
+  for (const reason of ["", "...", "___", "TODO", "TBD", "N/A", "none", "nothing skipped", "unknown", "<specific reason>", "<!-- staging is unavailable -->"]) {
+    const result = checkPullRequestFormat(body({
+      tests: `Not run: ${reason}\n\nStill unverified: webhook retry behavior.`,
+    }));
+    assert.equal(result.ok, false, reason || "empty reason");
+    assert.equal(result.sections.tests, false);
+    assert.match(result.problems[0], /Not run/);
+  }
+});
+
+test("a no-run declaration hidden in a comment is not evidence", () => {
+  const result = checkPullRequestFormat(body({
+    tests: "No evidence is included for these checks.\n<!--\nNot run: staging is unavailable for this change.\n-->",
+  }));
+  assert.equal(result.ok, false);
+  assert.equal(result.sections.tests, false);
+});
+
+test("output hidden in a comment does not satisfy the evidence requirement", () => {
+  const result = checkPullRequestFormat(body({
+    tests: `No visible test evidence is recorded.\n<!--\n${OUTPUT}\n-->`,
+  }));
+  assert.equal(result.ok, false);
+  assert.equal(result.sections.tests, false);
+});
+
+test("skipping one suite does not replace output for checks reported as run", () => {
+  const result = checkPullRequestFormat(body({
+    tests: "Ran the unit suite successfully.\n\nNot run: the e2e suite requires a staging receiver.",
+  }));
+  assert.equal(result.ok, false);
+  assert.equal(result.sections.tests, false);
+});
+
+test("a no-run declaration in another section does not satisfy tests", () => {
+  const result = checkPullRequestFormat(body({
+    tests: "No command or output has been recorded for this change.",
+    risks: "Not run: the staging cluster is unavailable for this change.",
+  }));
+  assert.equal(result.ok, false);
+  assert.equal(result.sections.tests, false);
+});
+
+test("a reasoned no-run declaration does not exempt missing sections", () => {
+  const result = checkPullRequestFormat(body({
+    users: null,
+    tests: "Not run: the required staging receiver is unavailable.",
+  }));
+  assert.equal(result.ok, false);
+  assert.equal(result.exempt, false);
+  assert.equal(result.sections.tests, true);
+  assert.deepEqual(result.problems, ["Missing a `## Users affected` section."]);
+});
+
+test("a plan in the PR body coexists with final notes without replacing them", () => {
+  const plan = "## Plan\n\n### What\nKeep retries bounded.\n\n### Why\nTemporary failures lose events.\n\n### How\nVerify the attempt cap.\n\n";
+  assert.equal(checkPullRequestFormat(plan + body()).ok, true);
+  const missing = checkPullRequestFormat(plan + body({ did: null }));
+  assert.equal(missing.ok, false);
+  assert.equal(missing.sections.did, false);
+});
+
 test("headings inside pasted output do not split the section", () => {
   const noisy = "Ran it.\n\n```\n## Users affected\n# fail 0\n```";
   const result = checkPullRequestFormat(body({ tests: noisy }));

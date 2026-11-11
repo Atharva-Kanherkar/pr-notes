@@ -5,8 +5,9 @@
 //   gh pr view 123 --json body -q .body | node check-pr-notes.mjs
 //   PR_BODY="$body" node check-pr-notes.mjs          (how the CI workflow calls it)
 //
-// Sections: What I did, Codebase affected, Users affected, Tests I ran (with a
-// fenced block of real output), Tradeoffs and risks. Exempt: PR_AUTHOR_TYPE=Bot,
+// Sections: What I did, Codebase affected, Users affected, Tests I ran (with an
+// output block or a reasoned no-run declaration), Tradeoffs and risks. This
+// checks format, not execution authenticity or correctness. Exempt: PR_AUTHOR_TYPE=Bot,
 // the `format-exempt` label (PR_LABELS as a JSON array), or the body marker
 // `<!-- pr-format: exempt -->`. Zero dependencies, Node 18+.
 // https://github.com/Atharva-Kanherkar/pr-notes
@@ -79,7 +80,7 @@ const FENCE_TOKEN = '\u0000fenced-output\u0000';
 /**
  * Pasted test output often contains `## ` lines, so fenced blocks are swapped
  * for a token before headings are parsed. A non-empty block keeps its token,
- * which is how the tests section proves it carries raw output.
+ * which records that the section contains a non-empty block, not that it is authentic.
  */
 function maskFences(markdown) {
   return markdown.replace(FENCE, (block) => {
@@ -99,6 +100,16 @@ function hasExemptMarker(markdown) {
 
 function matchesSection(title, pattern) {
   return pattern.test(title.replace(/[^\p{L}\p{N}\s/-]/gu, ' '));
+}
+
+/** A no-output section must start with an explicit, visible no-run declaration. */
+function hasNoRunDeclaration(markdown) {
+  const firstLine = visibleText(markdown).trim().split('\n')[0];
+  const declaration = /^Not run:[ \t]*(.+)$/i.exec(firstLine);
+  if (!declaration) return false;
+  const reason = declaration[1].replace(/[`*_]/g, '').trim();
+  return /\p{L}/u.test(reason) &&
+    !/^(?:<[^>]*>|TODO\b.*|TBD\b.*|N\/A|none|nothing(?: skipped)?|unknown|not applicable)[.!]?$/i.test(reason);
 }
 
 /** A section runs until the next heading at its own level or higher. */
@@ -139,7 +150,8 @@ export function checkPullRequestFormat(body, options = {}) {
       continue;
     }
     const text = sectionBody(headings, position);
-    const written = visibleText(text).replace(/\s+/g, ' ').trim();
+    const visible = visibleText(text);
+    const written = visible.replace(/\s+/g, ' ').trim();
     if (written.length < MIN_SECTION_CHARS) {
       problems.push(
         `The \`${headings[position].title}\` section is empty or too thin ` +
@@ -148,10 +160,11 @@ export function checkPullRequestFormat(body, options = {}) {
       sections[section.key] = false;
       continue;
     }
-    if (section.key === 'tests' && !text.includes(FENCE_TOKEN)) {
+    if (section.key === 'tests' && !visible.includes(FENCE_TOKEN) && !hasNoRunDeclaration(visible)) {
       problems.push(
         `The \`${headings[position].title}\` section needs the commands you ran and their ` +
-          'unedited output in a fenced code block.',
+          'unedited output in a fenced code block, or start with `Not run: <specific reason>` ' +
+          'when no checks ran.',
       );
       sections[section.key] = false;
       continue;

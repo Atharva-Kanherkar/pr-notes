@@ -1,42 +1,76 @@
 # PR notes template
 
-Copy this into the PR body. Every section needs real content; HTML comments do not count.
+Use the five sections below. Keep them short for small changes; expand decisions, impact,
+review focus, and verification gaps when the consequences warrant it. HTML comments do not count.
+
+No notes app is needed. Keep the plan under `## Plan` above the final notes, with `### What`,
+`### Why`, and `### How`. If using an accessible external plan, a link is enough. Summarize
+its intent, criteria, and important decisions here when the original is private or local.
 
 ~~~markdown
-Plan note: <link>
+Plan note: <reviewer-accessible link, or "included below">
 Linked issue: <#123 or "none">
+
+## Plan
+
+### What
+<Planned outcome, acceptance criteria, and scope.>
+
+### Why
+<Problem evidence, assumptions, and simpler alternative.>
+
+### How
+<Planned implementation, impact, and verification. Preserve changes and reasons.>
 
 ## What I did
 
-<The change as built, in a few sentences. Where it differs from the plan note, and why.>
+<Observable behavior, important decisions and assumptions, and deviations from the plan with why.>
 
 ## Codebase affected
 
-- <area>: <files or modules, and what kind of change>
+- <area>: <files or modules and the change>
+- Review first: <important path or symbol, and what to check there>
 
 ## Users affected
 
-<Who notices, where, what they see. Or: "No user-facing change, because ...".>
+- <person, agent, or system>: <surface, before/after behavior, compatibility/action needed, evidence>
+- Uncertain impact: <what has not been traced or verified, if relevant>
 
 ## Tests I ran
 
-<One line on what you ran, then the commands and output, unedited.>
+<What ran, which behavior it establishes, and relevant revision/environment.>
 
 ```
 $ <command>
-<output, as printed>
+<actual output, including failures, warnings, and skips>
 ```
 
-Not run: <what and why, or "nothing skipped">.
+Not run: <remaining checks and why, or "nothing skipped">.
+Still unverified: <what the evidence does not establish>.
 
 ## Tradeoffs and risks
 
-- <what you gave up>
-- <what could break, how far it spreads, how someone would notice>
-- <how to back it out>
+- <what was given up and why>
+- <remaining findings or possible failures, reach, and detection>
+- <how to reverse the change or limit its effects>
 ~~~
 
+When no checks ran, start the tests section with `Not run: <specific reason>`
+and explain the uncertainty. Do not invent output to pass. If any checks ran, preserve their
+actual output and identify the rest. The format check cannot verify the truth of either claim.
+
+Use **Users affected** for all relevant consumers: people, coding agents, automation, API clients,
+and integrations. Trace their entry points or callers. Include relevant unchanged contracts,
+label uncertainty, and skip irrelevant groups. "No user-facing change" still needs a reason
+and any developer, agent, or system effects.
+
+For UI work, add screenshots of relevant states. For substantial work, offer optional questions
+about the important path, a verification gap, and recovery. The human supplies the answers;
+the agent must not claim understanding or approval on their behalf.
+
 ## A filled example
+
+This fictional example uses an accessible external plan and records a failure and verification gap.
 
 ~~~markdown
 Plan note: https://github.com/acme/hooks/issues/412#issuecomment-2210
@@ -44,25 +78,33 @@ Linked issue: #412
 
 ## What I did
 
-Webhook delivery now retries 5xx answers and timeouts up to 5 times with jittered exponential
-backoff. Differs from the plan: the cap is 6 attempts total (1 + 5 retries), which matches how
-the dashboard already counts attempts.
+Delivery now retries 5xx responses and timeouts with jittered exponential backoff, up to five
+retries (six attempts total). 4xx responses remain final. This matches the plan.
+
+Decision: count the initial request as attempt 1, matching the dashboard. Preserve the event
+ID across retries. Assumption to verify in rollout: receivers use that ID to deduplicate.
 
 ## Codebase affected
 
-- Delivery: `src/webhooks/deliver.ts` (response classification), new `src/webhooks/backoff.ts`.
+- Delivery: `src/webhooks/deliver.ts` classifies responses; new `src/webhooks/backoff.ts` sets delays.
 - Schema: `migrations/0042_webhook_attempts.sql` adds two nullable columns; no backfill.
 - Worker: `src/worker/schedule.ts` polls `next_attempt_at`.
+- Review first: delivery state transitions and the worker's claim/update boundary. A restart
+  must neither lose a retry nor exceed the attempt cap.
 
 ## Users affected
 
-Customers whose receivers have short outages stop losing events. Receivers that are down for
-longer see up to 5 extra requests per event over about a minute. The dashboard's attempt count
-can now go above 1.
+- Webhook receivers: short outages get later delivery attempts; an unavailable receiver can get
+  five extra requests per event. Classifier and integration cases cover this behavior locally.
+- Operators: retry traffic can increase queue depth; watch backlog and failure metrics during rollout.
+- Dashboard users: the attempt counter can exceed 1; the existing counter consumes stored attempts.
+- API clients: the delivery serializer retains the event format and ID. No payload migration needed.
+- Uncertain impact: receiver-side deduplication in production has not been verified.
 
 ## Tests I ran
 
-Unit and integration tests for the webhook module, then the full suite.
+On the final revision, using Node 22 and a local test receiver. Module checks cover recovery
+after two failures, final 4xx, timeouts, exhaustion, and stable event IDs. Then ran the full suite.
 
 ```
 $ npm test -- webhooks
@@ -79,27 +121,31 @@ $ npm test
 Tests: 1 failed, 1,388 passed, 1,389 total
 ```
 
-The billing-export failure needs the local Postgres replica, which I don't have running. It
-fails the same way on main.
+The billing-export test cannot connect to the local Postgres replica. Running it on main in
+the same environment produced the same failure. This does not establish that billing passes.
 
-Not run: the load test, it needs the staging cluster.
+Not run: the load test; it needs the staging cluster.
+Still unverified: queue capacity during a mass outage and receiver-side deduplication in production.
 
 ## Tradeoffs and risks
 
-- Retries add load on receivers that are already struggling; jitter spreads it, but a mass outage
-  means up to 5x request volume for about a minute.
-- The migration adds nullable columns only, so it does not rewrite the table. On the 40M row
-  production table it should be metadata-only; worth watching the deploy.
-- Back it out by setting `WEBHOOK_MAX_ATTEMPTS=1`; the columns can stay.
+- Retries trade extra traffic for recovery. One event can produce up to six requests total;
+  jitter spreads them but does not establish capacity.
+- The migration adds nullable columns without a backfill. Inspect the production migration plan;
+  local tests do not establish lock duration on the large production table.
+- Monitor retry queue depth and failures. Disable retries with `WEBHOOK_MAX_ATTEMPTS=1`;
+  the nullable columns can remain.
 ~~~
 
 ## What weak sections look like
 
-| Section | Weak | Why it fails a reviewer |
+| Section | Weak | What the reviewer needs |
 |---|---|---|
-| What I did | "Implemented the feature as described." | Says nothing the title didn't. |
-| Codebase affected | A pasted list of 40 file paths. | No grouping, no sense of which change matters. |
-| Users affected | "Improves reliability." | Who, where, what do they see? |
-| Tests I ran | "All tests pass." | No command, no output, nothing to check. |
-| Tests I ran | Output with the one failure deleted. | This is the worst one. Never do it. |
-| Tradeoffs and risks | "None." | Every change gives something up. Say what. |
+| What I did | "Implemented the feature as described." | Actual behavior, decisions, and deviations. |
+| Codebase affected | Forty pasted file paths. | Grouped areas and the important path to inspect first. |
+| Users affected | "Improves reliability." | Who or what notices, where, and how behavior changes. |
+| Users affected | "No user impact" for an agent instruction change. | Which agents and developers consume it and what changes for them. |
+| Tests I ran | "All tests pass." | Actual commands, output, and what they establish. |
+| Tests I ran | Output with a failure deleted. | The failure and what was done about it. |
+| Tests I ran | "Green, so everything works." | What remains unverified and why it matters. |
+| Tradeoffs and risks | "None." | Specific uncertainty or the reason effects are limited. |
