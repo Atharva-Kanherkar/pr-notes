@@ -1,125 +1,167 @@
 ---
 name: pr-notes
-description: Two notes around every pull request. Before any code, a plan note (What, Why with a Mermaid diagram, How) that the human and the agent both edit. After the work, PR notes in the PR body (What I did, Codebase affected, Users affected, Tests I ran with output pasted unedited, Tradeoffs and risks), checked by a zero-dependency script. Use this whenever you pick up an issue, start a feature or fix that will end in a pull request, open or update a PR, or write a PR description, even if the user does not name the skill. Also use it when the user mentions "plan note", "PR notes", "pr-notes", "write up the PR", or asks to add a PR description check or template to a repository.
+description: Write shared plan notes before implementation and evidence-based PR descriptions after diff review, including who or what is affected. Use when starting work intended for a pull request, opening or updating a PR, writing PR notes, or adding PR-note templates and checks to a repository.
 ---
 
 # PR notes
 
-A reviewer should be able to judge a change from two short notes before opening the diff. One is
-written before the code and says what will be built and why. The other is the PR body and says
-what actually happened, who it reaches, the proof, and what could go wrong.
+Preserve intent before implementation, then give reviewers the decisions, impact, evidence, and
+gaps they need to evaluate the actual change. The notes guide code review; approval needs
+judgment about both the change and its evidence.
 
-```mermaid
-flowchart LR
-  I[Issue] <--> P[Plan note<br/>what / why / how]
-  P --> A[Implement]
-  A --> R[Pull request]
-  R --> N[PR notes<br/>did / code / users / tests / risks]
-  N -. links back .-> P
-```
+Use two notes: a shared **plan note** before coding and **PR notes** after review. Both can live
+in the PR description. For work already underway, record what is known now and say the plan was
+written late; never invent an earlier plan or reconstruct human intent as fact.
 
-Skip the skill only for work that will never become a PR (a question, a one-off script, a
-throwaway spike the user called a spike).
+Scale detail with the cost of being wrong. A tiny change can have a few sentences under What,
+Why, and How. Use a diagram when it explains a mechanism. Substantial changes need clearer
+acceptance criteria, evidence, and review attention. Split unrelated work into smaller PRs.
+
+Skip this workflow for questions or work that will never become a PR, such as a throwaway spike.
 
 ## Where the notes live
 
-Use the first one that exists, and tell the user where the note is, as a link when you have one.
+Respect the user's chosen location. Otherwise use a connected notes tool if available; without
+one, use the PR description. Never require a notes app or an issue to complete this workflow.
 
-1. **A notes tool connected to you.** Bridge Notes (`notes_create`, `notes_read`, `notes_edit`),
-   Notion, or similar. The plan note is a page; the PR notes are a child page of it. In Bridge,
-   create the plan as kind `note`, not `task`: a task cannot have child pages.
-2. **The issue.** Post the plan note as an issue comment
-   (`gh issue comment <n> --body-file plan.md`) and keep editing that same comment
-   (`gh api -X PATCH repos/{owner}/{repo}/issues/comments/<id> -F body=@plan.md`).
-3. **Neither.** Write `.pr-notes/<branch>/plan.md`, add `.pr-notes/` to `.git/info/exclude` so it
-   is never committed, and show the user the path.
+- **PR description only:** Put the plan in an existing draft PR body before coding, then add
+  the final PR notes after review. If no PR exists yet, stage the plan in
+  `.pr-notes/<branch>/plan.md` before implementation and include it in the first PR body. Exclude
+  `.pr-notes/` through `.git/info/exclude`. No empty commit or premature PR is needed just to store
+  the plan. Keep the plan as a clearly marked `## Plan` section above the five PR sections.
+- **Connected notes tool:** Keep the shared plan there and the final notes as its child where
+  supported. In Bridge, create the plan as kind `note`, not `task`. Share the page link.
+- **Issue comment:** Use this when the user chooses it; edit the same plan comment as work changes.
+  Follow repository conventions and the user's authorization for posting comments.
 
-The PR notes always also go in the PR body, because that is where reviewers read.
+The final PR notes always go in the PR body. If reviewers cannot open the original plan, include
+its intent, acceptance criteria, and important decisions there. A local path or a private notes
+link alone is not a reviewer handoff. Save a copy beside the plan when useful.
 
-## Step 1: the plan note, before the first edit
+## 1. Plan before implementation
 
-Reading code to understand the problem is fine. Editing files is not, until the plan note exists.
-Fill [references/plan-note.md](references/plan-note.md):
+Read code to understand the problem first. Before the first implementation edit, fill
+[references/plan-note.md](references/plan-note.md):
 
-- **What**: the change in a few lines, and what is deliberately out of scope.
-- **Why**: the problem, and a Mermaid diagram of the mechanism: the flow that breaks, the data
-  path, the before and after. A diagram that only restates the headings is decoration; draw the
-  thing a reviewer would otherwise have to reconstruct from the code.
-- **How**: the files and symbols to touch, the steps, and the tests that will prove it works.
+- **What:** the observable outcome, affected people or consumers, scope, and acceptance criteria.
+- **Why:** the problem and supporting evidence. Distinguish observed facts from assumptions.
+  Consider a simpler alternative, including reuse or leaving behavior alone, and explain
+  the choice briefly. Add a diagram if it makes the mechanism easier to understand.
+- **How:** the files and symbols likely to change, implementation steps, and exact checks that
+  would establish the criteria. Identify consequential verification gaps and risks.
 
-**The plan note is two-way.** The human edits it as freely as you do.
+Use the person's stated intent. Ask for missing information when it would materially change
+the outcome; label routine assumptions and continue within the authorized scope.
 
-- Stop and wait for the user after writing it when they asked to review the plan, or when the
-  change is hard to undo (a migration, a public API or wire format, deleting data, auth or
-  permissions). Otherwise share the link and continue.
-- Re-read the note right before you start coding and again before you open the PR. If the human
-  changed it, their edit wins over your earlier plan and over anything said earlier in the chat.
-- When the work diverges from the plan, edit the note (a short "Changed during implementation"
-  line under How) rather than drifting silently.
+The note is two-way. Re-read it before coding, on resuming or handing off work, and before
+opening or updating the PR. Incorporate human edits and the user's latest explicit instructions;
+resolve material conflicts rather than treating an old plan as newer than the conversation.
 
-## Step 2: implement
+Share the plan and continue unless the person asked to review it first or an action needs
+authorization that has not been given. Update the note when the work changes, with a short
+"Changed during implementation" line and the reason. In a PR-only workflow, keep that record
+in the plan section when adding the final notes.
 
-Implement from the note. Run the tests you named under How, and keep their raw output; you will
-paste it.
+## 2. Implement, verify, and trace impact
 
-## Step 3: the PR notes
+Implement from the plan. Run the relevant checks, read their output, and keep the real output
+for the PR notes. Re-run affected checks after later edits so evidence covers the final change.
 
-Fill [references/pr-notes.md](references/pr-notes.md). Link the plan note and the issue at the
-top, then write five sections. [references/pr-notes.md](references/pr-notes.md) has a filled
-example and what a weak section looks like.
+For each acceptance criterion, record what establishes it and what remains unverified. A
+passing check covers only what it exercises. Consider whether a test could share the same
+mistaken assumption as the implementation; use an observable behavior or failure case to check it.
+
+Explicitly identify **who or what the change affects**. Trace relevant entry points, callers,
+configuration, and interfaces to identify direct and indirect consumers. Consider end users,
+operators, maintainers, coding agents, automation, API clients, and integrations where relevant;
+do not fill a checklist of groups with no connection to the change.
+
+For each affected group, state its surface, before/after behavior, compatibility or action needed,
+and the evidence for the impact. Include a relevant unchanged contract when it matters. Label
+inferred or unverified impact. Do not claim "all users" or "no impact" without checking the paths
+that support it. Carry this assessment into **Users affected**, including agents and systems.
+Offer to walk the human through that assessment when the effects are complex.
+
+## 3. Review the actual diff
+
+Read the diff and relevant surrounding code before writing the final summary:
+
+- Compare behavior with the plan and criteria. Check relevant error paths, boundaries, and
+  existing invariants. Look for accidental scope or default changes.
+- Challenge consequential assumptions: what would make the approach wrong, and what evidence
+  could reveal it? Assess maintainability, architecture, security, and performance as relevant.
+- Record significant decisions, defaults, rejected alternatives, and deviations with concise
+  reasons. Supply a checkable decision summary, not a transcript of internal reasoning.
+- Fix findings and re-verify affected behavior. Report unresolved findings with file/line,
+  impact, and missing evidence; do not hide them behind a passing format check.
+
+A reviewer with fresh context can help with substantial or risky changes when available and
+authorized. Label self-review accurately; another agent's agreement is additional evidence,
+not human approval. Recommend deeper human review when consequences are high or you cannot
+explain what the checks would miss.
+
+When review reveals a repeatable failure, capture the lesson in a focused regression check or
+an existing project rule when useful. Avoid generic instructions accumulated from every edit.
+
+## 4. Write the PR notes
+
+Use [references/pr-notes.md](references/pr-notes.md), including its filled example and PR-only
+layout. Link or include the plan and name the issue if any, then keep these five sections:
 
 | Section | Contains |
 |---|---|
-| **What I did** | The change as built. Say where it differs from the plan note. |
-| **Codebase affected** | Modules, files, APIs, migrations, config, CI, grouped by area. Not a file dump. |
-| **Users affected** | Who notices, on which surface or platform, and what they see. "No user-facing change" plus the reason is a valid answer. |
-| **Tests I ran** | Each command and its output, pasted unedited in a fenced block. Name what you did not run and why. |
-| **Tradeoffs and risks** | What you gave up, what could break, how far it would spread, how someone would notice, how to back it out. |
+| **What I did** | Observable behavior, important decisions and assumptions, deviations and why. |
+| **Codebase affected** | Grouped modules, APIs, migrations, config, or CI. Point to important paths to review first and explain why. |
+| **Users affected** | Affected people, agents, automation, clients, or integrations; surface, before/after behavior, compatibility, and evidence or uncertainty. |
+| **Tests I ran** | Actual commands and output, what they establish, what they miss, and what was not run. |
+| **Tradeoffs and risks** | What was given up, remaining findings, possible failures, reach, detection, and rollback. |
 
-Rules for **Tests I ran**, because this is the section people fake:
+"No user-facing change" is valid with a reason; still name developer, agent, or system effects
+when present. Keep the heading **Users affected** for compatibility with existing checks.
 
-- Paste the real output. Never rewrite, summarize inside the block, or "clean up" a failure.
-- Long output may be trimmed only with an explicit marker such as `[... 340 passing lines trimmed ...]`,
-  and never trim a failure, warning, or skip.
-- Failures and flakes stay in, with a line saying what you did about them.
-- Never list a test you did not run. "Not run: the e2e suite, needs a staging account" is a
-  complete, honest answer.
+Keep **Tests I ran** honest:
 
-For UI changes, add a `## Screenshots` section.
+- Paste actual output in fenced blocks. Preserve failures, warnings, skips, and flakes and
+  explain their disposition. Never rewrite output into a success summary.
+- Trim long passing output only with an explicit marker such as `[... 340 passing lines trimmed ...]`.
+- Explain what the checks establish and leave unverified. Identify the revision and relevant
+  environment when they affect reproducibility or interpretation.
+- If some checks ran, include their output and list others as `Not run: <what and why>`.
+- If no checks ran, start the section with `Not run: <specific reason>` without inventing output.
+  State what is unverified. For manual checks, record the actions and observed results in an
+  evidence block; attach relevant screenshots. Do not invent a shell command for a manual action.
 
-Before creating the PR, check the body:
+For UI changes, add screenshots of relevant appearance or interaction states.
+
+For substantial work, offer an optional understanding check: how does the important path work,
+what failure might the checks miss, and how would we detect or reverse it? Make the questions
+specific to the actual change. Never invent human answers or approval, and do not turn the
+questions into an automatic merge gate.
+
+Before opening or updating the PR, run:
 
 ```bash
 node <this skill's directory>/scripts/check-pr-notes.mjs body.md
-gh pr create --title "<title>" --body-file body.md
 ```
 
-`gh pr create` skips the repository's PR template, so the checker is the only thing between you
-and an incomplete body. It exits non-zero and names each missing or empty section.
+The checker validates format: five populated sections and an output block or a reasoned no-run
+declaration. It cannot authenticate output, prove the plan predated implementation, verify
+correctness, or establish human understanding. A passing result is not approval to merge.
 
-Then save the PR notes where the plan note lives: a child page of it in a notes tool, or a reply
-on the issue.
+Use `gh pr create --body-file body.md` when creating a PR and share its link. In a PR-only
+workflow, preserve the plan above the final notes rather than replacing it with a new summary.
 
-## Enforcing it in a repository
+## Add the format check to a repository
 
-When the user asks to make this a rule for a repo, copy the assets in and add the rule to the
-agent instruction files:
+When asked, copy the PR template, workflow, and checker from `assets/github/` and `scripts/`.
+Merge with existing files and repository conventions rather than replacing them blindly.
+Add a short rule to existing agent instruction files naming the two notes and checker command.
 
-```bash
-mkdir -p .github/workflows scripts
-cp <skill>/assets/github/pull_request_template.md .github/pull_request_template.md
-cp <skill>/assets/github/workflows/pr-notes.yml .github/workflows/pr-notes.yml
-cp <skill>/scripts/check-pr-notes.mjs scripts/check-pr-notes.mjs
-```
-
-Then add a short "Pull requests" section to `AGENTS.md` and `CLAUDE.md` (whichever the repo has)
-naming the two notes and the checker command. Making the `PR notes` check required in branch
-protection is the user's call; offer it, do not do it unasked.
-
-The check skips drafts, bot authors, the `format-exempt` label, and bodies containing
-`<!-- pr-format: exempt -->`.
+The workflow skips drafts. Bot authors, the `format-exempt` label, and
+`<!-- pr-format: exempt -->` also bypass the check. Branch protection changes require the user's
+authorization; installing this skill alone does not enforce its workflow.
 
 ## Writing style
 
-Plain and specific. Short and true beats long and padded. Every claim in the PR notes should be
-something a reviewer could check: a file, a command, an output line, a screen.
+Plain, specific, and proportional to the change. Prefer claims a reviewer can check against a
+file, command, output, or screen. Say what you do not know instead of filling the gap.
