@@ -8,6 +8,8 @@
 - The agent reviews the actual diff against the plan and acceptance criteria, records significant decisions and remaining findings, and points reviewers to important paths.
 - Verification explains what checks establish and leave unverified. Real output retains failures, warnings, skips, and explicit trim markers.
 - Private or local plans have a reviewer-accessible summary in the PR.
+- Without a notes app, keep the plan and final notes together in the PR description. Use an existing draft PR when available; stage the plan locally until the PR exists otherwise. Do not require an issue comment, additional app, or empty commit.
+- Explicitly identify affected people, coding agents, automation, API clients, and integrations where relevant. Trace callers/entry points and describe each affected group's surface and before/after behavior; label uncertainty instead of inventing impact.
 - Diagram depth and review effort scale with risk. Human comprehension questions are optional; the agent never invents human responses or approval.
 - Describe CI accurately: body structure and evidence presence, without claiming proof of plan chronology, authentic execution, correctness, or human understanding.
 - A tests section with `Not run: <specific reason>` and no output can pass the format check when nothing ran. Bare declarations, placeholders, comments, and arbitrary unsupported passing claims fail.
