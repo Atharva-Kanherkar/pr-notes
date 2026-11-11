@@ -2,6 +2,7 @@ name: PR notes
 
 # Fails a pull request whose body is missing any of the five PR notes:
 # What I did, Codebase affected, Users affected, Tests I ran, Tradeoffs and risks.
+# This is a body format check, not proof of code correctness or test execution.
 # https://github.com/Atharva-Kanherkar/pr-notes
 
 on:
